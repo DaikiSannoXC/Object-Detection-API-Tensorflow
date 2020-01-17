@@ -59,6 +59,14 @@ trainset_provider = {
     'val_generator': None                                 # not used
 }
 centernet = net.CenterNet(config, trainset_provider)
+
+variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+variables = [v for v in variables if v.name.startswith('backbone')]
+offset = len('backbone/')
+variables = {v.name[offset:]: v for v in variables}
+saver = tf.train.Saver(var_list=variables)
+saver.restore('backbone/model')
+
 # centernet.load_weight('./centernet/test-8350')
 # centernet.load_pretrained_weight('./centernet/test-8350')
 for i in range(epochs):

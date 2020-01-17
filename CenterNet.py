@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import tensorflow as tf
 import numpy as np
+import resnet_model
 import sys
 import os
 
@@ -70,62 +71,28 @@ class CenterNet:
         self.lr = tf.placeholder(dtype=tf.float32, shape=[], name='lr')
 
     def _build_graph(self):
-        with tf.variable_scope('backone'):
-            conv = self._conv_bn_activation(
-                bottom=self.images,
-                filters=16,
+        with tf.variable_scope('backbone'):
+            backbone_network = resnet_model.Model(
+                resnet_size=50,
+                bottleneck=True,
+                num_classes=2,
+                num_filters=64,
                 kernel_size=7,
-                strides=1,
+                conv_stride=2,
+                first_pool_size=3,
+                first_pool_stride=2,
+                block_sizes=[3, 4, 6, 3],
+                block_strides=[1, 2, 2, 2],
+                include_top=False,
             )
-            conv = self._conv_bn_activation(
-                bottom=conv,
-                filters=16,
-                kernel_size=3,
-                strides=1,
-            )
-            conv = self._conv_bn_activation(
-                bottom=conv,
-                filters=32,
-                kernel_size=3,
-                strides=2,
-            )
-            dla_stage3 = self._dla_generator(conv, 64, 1, self._basic_block)
-            dla_stage3 = self._max_pooling(dla_stage3, 2, 2)
-
-            dla_stage4 = self._dla_generator(dla_stage3, 128, 2, self._basic_block)
-            residual = self._conv_bn_activation(dla_stage3, 128, 1, 1)
-            residual = self._avg_pooling(residual, 2, 2)
-            dla_stage4 = self._max_pooling(dla_stage4, 2, 2)
-            dla_stage4 = dla_stage4 + residual
-
-            dla_stage5 = self._dla_generator(dla_stage4, 256, 2, self._basic_block)
-            residual = self._conv_bn_activation(dla_stage4, 256, 1, 1)
-            residual = self._avg_pooling(residual, 2, 2)
-            dla_stage5 = self._max_pooling(dla_stage5, 2, 2)
-            dla_stage5 = dla_stage5 + residual
-
-            dla_stage6 = self._dla_generator(dla_stage5, 512, 1, self._basic_block)
-            residual = self._conv_bn_activation(dla_stage5, 512, 1, 1)
-            residual = self._avg_pooling(residual, 2, 2)
-            dla_stage6 = self._max_pooling(dla_stage6, 2, 2)
-            dla_stage6 = dla_stage6 + residual
+            h = backbone_network(self.images, training=self.is_training)
         with tf.variable_scope('upsampling'):
-            dla_stage6 = self._conv_bn_activation(dla_stage6, 256, 1, 1)
-            dla_stage6_5 = self._dconv_bn_activation(dla_stage6, 256, 4, 2)
-            dla_stage6_4 = self._dconv_bn_activation(dla_stage6_5, 256, 4, 2)
-            dla_stage6_3 = self._dconv_bn_activation(dla_stage6_4, 256, 4, 2)
-
-            dla_stage5 = self._conv_bn_activation(dla_stage5, 256, 1, 1)
-            dla_stage5_4 = self._conv_bn_activation(dla_stage5+dla_stage6_5, 256, 3, 1)
-            dla_stage5_4 = self._dconv_bn_activation(dla_stage5_4, 256, 4, 2)
-            dla_stage5_3 = self._dconv_bn_activation(dla_stage5_4, 256, 4, 2)
-
-            dla_stage4 = self._conv_bn_activation(dla_stage4, 256, 1, 1)
-            dla_stage4_3 = self._conv_bn_activation(dla_stage4+dla_stage5_4+dla_stage6_4, 256, 3, 1)
-            dla_stage4_3 = self._dconv_bn_activation(dla_stage4_3, 256, 4, 2)
-
-            features = self._conv_bn_activation(dla_stage6_3+dla_stage5_3+dla_stage4_3, 256, 3, 1)
-            features = self._conv_bn_activation(features, 256, 1, 1)
+            h = self._dconv_bn_activation(h, 256, 3, 1)
+            h = self._dconv_bn_activation(h, 256, 4, 2)
+            h = self._dconv_bn_activation(h, 128, 3, 1)
+            h = self._dconv_bn_activation(h, 128, 4, 2)
+            h = self._dconv_bn_activation(h, 64, 3, 1)
+            features = self._dconv_bn_activation(h, 64, 4, 2)
             stride = 4.0
 
         with tf.variable_scope('center_detector'):
